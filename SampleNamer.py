@@ -295,11 +295,11 @@ while True:
     # -----------------------------
     # ASSIGN FINAL DESTINATION FOLDER
     # -----------------------------
-    destinationFolder = sampleTypeFolder
-    print("Final storage folder:", destinationFolder)
+    finalisedFolder = sampleTypeFolder
+    print("Final storage folder:", finalisedFolder)
     
     # combine destination folder and new file name
-    destinationPath = os.path.join(destinationFolder, newName)
+    destinationPath = os.path.join(finalisedFolder, newName)
 
 
     # -----------------------------
