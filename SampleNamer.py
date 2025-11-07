@@ -1,6 +1,7 @@
 import os
 import shutil
 import re
+import json
 
 # -----------------------------
 # HELPER FUNCTIONS AND VARIABLES
@@ -61,14 +62,54 @@ def spaces_to_underscores(inputString):
 # COLLECT DESTINATION PATH
 # -----------------------------
 
-# look for destination file and check if it exists
-while True:
-    destinationFolder = input("Enter the folder where you want to save your file: ")
-    destinationFolder = destinationFolder.strip().strip('"').strip("'")
-    if not os.path.isdir(destinationFolder):
-        print("That folder doesn't exist. Please check the path and try again.")
+# Get the folder where the script lives
+script_folder = os.path.dirname(os.path.abspath(__file__))
+
+# Build path to config.json in the same folder
+config_file = os.path.join(script_folder, "sample_library_location.json")
+
+# Load existing config if it exists
+if os.path.exists(config_file):
+    with open(config_file, "r") as f:
+        config = json.load(f)
+    destinationFolder = config.get("destination_folder")
+    
+    # Check if folder exists
+    if destinationFolder and os.path.isdir(destinationFolder):
+        # Ask user if they want to change it
+        while True:
+            response = input(f"A destination folder is already set: '{destinationFolder}'. Do you want use it? (y/n): ").strip().lower()
+            if response in yes:
+                print(f"Using existing destination folder: {destinationFolder}")
+                break
+            elif response in no:
+                destinationFolder = ""
+                break
+            else:
+                print("Invalid input. Please enter 'y' or 'n'.")
     else:
-        break
+        print("The previously saved destination folder doesn't exist. Please set a valid folder.")
+        destinationFolder = ""
+else:
+    config = {}
+    destinationFolder = ""
+
+# Ask for folder if needed
+if not destinationFolder:
+    while True:
+        destinationFolder = input("Enter the folder where you want to save your files: ").strip().strip('"').strip("'")
+        destinationFolder = os.path.expanduser(destinationFolder)
+        
+        if not os.path.isdir(destinationFolder):
+            print("That folder doesn't exist. Please check the path and try again.")
+        else:
+            # Save to JSON
+            config["destination_folder"] = destinationFolder
+            with open(config_file, "w") as f:
+                json.dump(config, f, indent=4)
+            break
+
+print("Using destination folder:", destinationFolder)
 
 # -------------------------------------------------
 # ----------------- MAIN LOOP ---------------------
