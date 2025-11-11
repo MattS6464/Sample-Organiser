@@ -204,10 +204,12 @@ while True:
     while True:
         sourcePath = input("Enter the source file path: ")
         sourcePath = sourcePath.strip().strip('"').strip("'")
-        print(sourcePath)
         if not os.path.isfile(sourcePath):
             print("That file doesn't exist. Please check the path and try again.")
             print(f"Checked path: {sourcePath}")
+        elif not sourcePath.lower().endswith(AUDIO_EXTENSIONS):
+            print("That file is not a supported audio format. Please provide a valid audio file.")
+            print(f"Supported formats: {AUDIO_EXTENSIONS}")
         else:
             break
 
