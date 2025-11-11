@@ -12,6 +12,16 @@ yes = ["y", "yes", "yeah", "yep", "go", "sure", "do it"]
 
 AUDIO_EXTENSIONS = (".wav", ".aif", ".aiff", ".mp3")
 
+def ask_yes_no(prompt):
+    while True:
+        resp = input(prompt).strip().lower()
+        if resp in yes:
+            return True
+        elif resp in no:
+            return False
+        else:
+            print("Please answer 'y' or 'n'.")
+            
 def key_detection(userKey):
 
     # make lower case and remove spaces
@@ -102,7 +112,7 @@ def scan_sample_library(destinationFolder):
 
         # Store pack data
         packs_data[pack_name] = {
-            "num_samples": pack_sample_count,  # total in pack
+            "num_samples_in_pack": pack_sample_count,  # total in pack
             "instruments": instruments_data
         }
 
@@ -129,16 +139,11 @@ destinationFolder = config.get("destination_folder", "")
 
 # validate destination folder
 if destinationFolder and os.path.isdir(destinationFolder):
-    while True:
-        response = input(f"A destination folder is already set: '{destinationFolder}'. Do you want use it? (y/n): ").strip().lower()
-        if response in yes:
-            print(f"Using existing destination folder: {destinationFolder}")
-            break
-        elif response in no:
-            destinationFolder = ""
-            break
-        else:
-            print("Invalid input. Please enter 'y' or 'n'.")
+    response = ask_yes_no(f"A destination folder is already set: '{destinationFolder}'. Do you want use it? (y/n): ")
+    if response:
+        print(f"Using existing destination folder: {destinationFolder}")
+    elif response in no:
+        destinationFolder = ""
 else:
     destinationFolder = ""
 
@@ -168,7 +173,7 @@ while True:
     for pack_name, pack_data in found_packs.items():
         pack_entry = config["packs"].setdefault(pack_name, {})
         # Update pack sample count
-        pack_entry["num_samples"] = pack_data["num_samples"]
+        pack_entry["num_samples_in_pack"] = pack_data["num_samples_in_pack"]
         pack_entry["instruments"] = pack_entry.get("instruments", {})
         
         # Update instruments
@@ -212,10 +217,89 @@ while True:
     # GATHER USER INPUTS FOR NAMING AND ORGANISING
     # -----------------------------
 
-    # sample pack name
-    packName = camel_case(input("What sample pack does this sample belong to?"))
+    # ----------------------- sample pack ----------------------
+    while True:
+        packName = camel_case(input("What sample pack does this sample belong to?")).strip()
 
-    # sample type
+        # no pack name provided
+        if not packName:
+            uncategorised_pack = ask_yes_no("No name provided, would you like to store in the 'Uncatergorised' folder? (y/n): ")
+            if not uncategorised_pack:
+                continue
+            else:
+                packFolder = os.path.join(destinationFolder, "Uncategorised")
+                if not os.path.isdir(packFolder):
+                    os.makedirs(packFolder)
+                    print(f"No pack name provided. 'Uncategorised' folder created. Samples will be stored here.")
+                else:
+                    print("No pack name provided. Samples will be stored in existing 'Uncategorised' folder.")
+                break
+
+        # pack exists in JSON
+        if packName in config["packs"]:
+            packFolder = os.path.join(destinationFolder, packName)
+            print(f"Sample will be stored in existing '{packName}' folder.")
+            break
+
+        # if pack not in JSON, ask if user wants to create it
+        create_folder = ask_yes_no(f"There is no folder named '{packName}' in the destination. Create it? (y/n): ")
+        if create_folder:
+            packFolder = os.path.join(destinationFolder, packName)
+            os.makedirs(packFolder)
+            print(f"Folder '{packName}' created. Samples from this pack will be stored here.")
+            break
+
+        # if user doesn't want to create, ask if they want to provide a different pack
+        different_pack = ask_yes_no("Would you like to provide a different sample pack? (y/n): ")
+        if not different_pack:
+            packFolder = os.path.join(destinationFolder, "Uncategorised")
+            if not os.path.isdir(packFolder):
+                os.makedirs(packFolder)
+                print(f"Folder 'Uncategorised' created. Samples without a pack will be stored here.")
+            else:
+                print("Samples will be stored in 'Uncategorised' folder.")
+            break
+
+        # else go back to start of loop to ask for pack name again
+
+    # ----------------------- sample instrument ----------------------
+    while True:
+        instrument = camel_case(input("What instrument is this sample?"))
+
+        # no instrument name provided
+        if not instrument:
+            print("Instrument must have a name. Please try again.")
+            continue
+
+        # if instrument exists in pack, confirm and break
+        if instrument in config["packs"].get(packName, {}).get("instruments", {}):
+            print(f"Samples for instrument '{instrument}' will be stored in existing folder.")
+            break
+
+        # if instrument not found, ask if user wants to create it
+        create_instrument = ask_yes_no(f"There is no folder for instrument '{instrument}' in pack '{packName}'. Create it? (y/n): ")
+        if create_instrument:
+            os.makedirs(instrumentFolder)
+            print(f"Folder '{instrument}' created inside '{packFolder}'.")
+            break
+
+        # if user doesn't want to create, use "Miscellaneous" folder instead
+        different_instrument = ask_yes_no("Would you like to provide a different instrument? (y/n): ")
+        if not different_instrument:
+            instrumentFolder = os.path.join(packFolder, "Miscellaneous")
+            # only create "Miscellaneous" if it doesnt already exist
+            if not os.path.isdir(instrumentFolder):
+                os.makedirs(instrumentFolder)
+                print(f"'Miscellaneous' folder created inside '{packFolder}'.")
+            # if it already exists, use it and inform the user
+            else:
+                print(f"Samples will be stored in existing 'Miscellaneous' folder inside '{packFolder}'.") 
+            break
+
+        # else go back to start of loop to ask for instrument again
+        
+
+    # ----------------------- sample type ----------------------
     while True:
         sampleType = input("Is this a loop or one-shot? (enter 'loop' or 'OS'): ").strip().lower()
         if sampleType in ("loop", "l"):
@@ -226,7 +310,7 @@ while True:
             break
         print("Invalid response. Please enter 'loop' or 'OS'.")
 
-    # sample tempo
+   # ----------------------- sample tempo ----------------------
     while True:
         tempo = input("What is the tempo of this sample?")
         tempo = tempo.lower().replace(" ", "")
@@ -252,15 +336,7 @@ while True:
         tempo = str(bpm)
         break
 
-    # sample instrument
-    while True:
-        instrument = camel_case(input("What instrument is this sample?"))
-        if not instrument:
-            print("Instrument must have a name. Please try again.")
-        else:
-            break
-
-    # sample name
+    # ----------------------- sample name ----------------------
     while True:
         sampleName = camel_case(input("What would you like to name this sample?"))
         if not sampleName:
@@ -268,7 +344,7 @@ while True:
         else:
             break
 
-    # sample key
+    # ----------------------- sample key ----------------------
     while True:
         try:
             key = key_detection(input("What key is this sample in? (e.g., C, D#, Fmin, Gmaj, etc.): "))
@@ -300,98 +376,6 @@ while True:
 
     # Join with underscores
     newName = "_".join(components) + FileExt
-
-
-    # -----------------------------
-    # LOCATE / CREATE FOLDERS
-    # -----------------------------
-
-    # -----------------------------
-    # look for / create pack folder in destination folder
-    # if pack has no name use "Uncategorised", if that doesnt exist then create it
-    if packName.strip() == "":
-        packFolder = os.path.join(destinationFolder, "Uncategorised")
-
-        if not os.path.isdir(packFolder):
-            os.makedirs(packFolder)
-            print(f"No pack name provided. 'Uncategorised' folder created. Samples will be stored here.")
-    
-        else:
-            print("No pack name provided. Samples will be stored in existing 'Uncategorised' folder.")
-
-    # if pack has a name, check if a folder for it exists
-    else:
-        packFolder = os.path.join(destinationFolder, packName)
-
-        while True:
-            # check if the pack folder exists
-            if not os.path.isdir(packFolder):
-                response = input(f"There is no folder named '{packName}' in the destination. Create it? (y/n): ").strip().lower()
-                
-                # create the pack folder if it doesnt exist and the user agrees
-                if response in yes:
-                    os.makedirs(packFolder)
-                    print(f"Folder '{packName}' created. Samples from this pack will be stored here.")
-                    break
-                
-                # if user declines, use "Uncategorised" folder instead
-                elif response in no:
-                    packFolder = os.path.join(destinationFolder, "Uncategorised")
-                    
-                    # only create "Uncategorised" if it doesnt already exist
-                    if not os.path.isdir(packFolder):
-                        os.makedirs(packFolder)
-                        print(f"Folder 'Uncategorised' created. Samples without a pack will be stored here.")
-                    
-                    else:
-                        print("Samples will be stored in 'Uncategorised' folder.")
-                
-                    break
-                
-                # if user input is invalid, ask again
-                else:
-                    print("Please answer 'y' (yes) or 'n' (no).")
-            
-            # if the pack folder exists, use it and tell the user
-            else:
-                print(f"Sample will be stored in '{packName}' folder.")
-                break
-
-    # -----------------------------
-    # look for / create instrument folder in pack folder
-    instrumentFolder = os.path.join(packFolder, instrument) 
-
-    # check if instrument folder exists
-    if not os.path.isdir(instrumentFolder):
-
-        while True:
-            # ask user if they want to create the instrument folder
-            response = input(f"The folder for instrument '{instrument}' does not exist. Create it? (y/n): ").strip().lower()
-            
-            # create the instrument folder if user agrees
-            if response in yes:
-                os.makedirs(instrumentFolder)
-                print(f"Folder '{instrument}' created inside '{packFolder}'.")
-                break
-
-            # if user declines, use "Miscellaneous" folder instead
-            elif response in no:
-                instrumentFolder = os.path.join(packFolder, "Miscellaneous")
-                
-                # only create "Miscellaneous" if it doesnt already exist
-                if not os.path.isdir(instrumentFolder):
-                    os.makedirs(instrumentFolder)
-                    print(f"'Miscellaneous' folder created inside '{packFolder}'.")
-                
-                # if it already exists, use it and inform the user
-                else:
-                    print(f"Samples will be stored in existing 'Miscellaneous' folder inside '{packFolder}'.")
-                
-                break
-            
-            # if user input is invalid, ask again
-            else:
-                print("Please answer 'y' (yes) or 'n' (no).")
 
     # -----------------------------
     # look for / create oneshot or loop folder in instrument folder
