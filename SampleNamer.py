@@ -10,6 +10,8 @@ import json
 no = ["n/a", "n", "na", "none", "no", ""]
 yes = ["y", "yes", "yeah", "yep", "go", "sure", "do it"]
 
+AUDIO_EXTENSIONS = (".wav", ".aif", ".aiff", ".mp3")
+
 def key_detection(userKey):
 
     # make lower case and remove spaces
@@ -57,6 +59,54 @@ def camel_case(inputString):
 def spaces_to_underscores(inputString):
     return inputString.strip().replace(" ", "_")
 
+# count the samples in a folder that are in the correct format
+def count_samples_in_folder(folder_path):
+    if not os.path.isdir(folder_path):
+        return 0
+    return len([
+        f for f in os.listdir(folder_path)
+        if os.path.isfile(os.path.join(folder_path, f)) and
+           not f.startswith(".") and  # ignore hidden files like .DS_Store
+           f.lower().endswith(AUDIO_EXTENSIONS)
+    ])
+
+# Scan the destination folder for existing pack folders
+def scan_sample_library(destinationFolder):
+    """Scan packs, instruments, and count samples per pack."""
+    packs_data = {}
+
+    for pack_name in os.listdir(destinationFolder):
+        pack_path = os.path.join(destinationFolder, pack_name)
+        if not os.path.isdir(pack_path):
+            continue
+
+        instruments_data = {}
+        pack_sample_count = 0  # total samples in this pack
+
+        for instrument in os.listdir(pack_path):
+            instrument_path = os.path.join(pack_path, instrument)
+            if not os.path.isdir(instrument_path):
+                continue
+
+            # Count OS and LOOP samples for this instrument
+            num_samples_instr = 0
+            for subfolder in ["OS", "LOOP"]:
+                subfolder_path = os.path.join(instrument_path, subfolder)
+                num_samples_instr += count_samples_in_folder(subfolder_path)
+
+            # Store instrument data
+            instruments_data[instrument] = {"num_samples": num_samples_instr}
+
+            # Add to pack total
+            pack_sample_count += num_samples_instr
+
+        # Store pack data
+        packs_data[pack_name] = {
+            "num_samples": pack_sample_count,  # total in pack
+            "instruments": instruments_data
+        }
+
+    return packs_data
 
 # -----------------------------
 # COLLECT DESTINATION PATH
@@ -68,54 +118,79 @@ script_folder = os.path.dirname(os.path.abspath(__file__))
 # Build path to config.json in the same folder
 config_file = os.path.join(script_folder, "sample_library_location.json")
 
-# Load existing config if it exists
+# load or create the config file
 if os.path.exists(config_file):
     with open(config_file, "r") as f:
         config = json.load(f)
-    destinationFolder = config.get("destination_folder")
-    
-    # Check if folder exists
-    if destinationFolder and os.path.isdir(destinationFolder):
-        # Ask user if they want to change it
-        while True:
-            response = input(f"A destination folder is already set: '{destinationFolder}'. Do you want use it? (y/n): ").strip().lower()
-            if response in yes:
-                print(f"Using existing destination folder: {destinationFolder}")
-                break
-            elif response in no:
-                destinationFolder = ""
-                break
-            else:
-                print("Invalid input. Please enter 'y' or 'n'.")
-    else:
-        print("The previously saved destination folder doesn't exist. Please set a valid folder.")
-        destinationFolder = ""
 else:
     config = {}
+
+destinationFolder = config.get("destination_folder", "")
+
+# validate destination folder
+if destinationFolder and os.path.isdir(destinationFolder):
+    while True:
+        response = input(f"A destination folder is already set: '{destinationFolder}'. Do you want use it? (y/n): ").strip().lower()
+        if response in yes:
+            print(f"Using existing destination folder: {destinationFolder}")
+            break
+        elif response in no:
+            destinationFolder = ""
+            break
+        else:
+            print("Invalid input. Please enter 'y' or 'n'.")
+else:
     destinationFolder = ""
 
-# Ask for folder if needed
 if not destinationFolder:
     while True:
-        destinationFolder = input("Enter the folder where you want to save your files: ").strip().strip('"').strip("'")
+        destinationFolder = input("Enter the folder where you want to save your file: ").strip().strip('"').strip("'")
         destinationFolder = os.path.expanduser(destinationFolder)
-        
         if not os.path.isdir(destinationFolder):
-            print("That folder doesn't exist. Please check the path and try again.")
+            print("That folder doesn't exist. Please try again.")
         else:
-            # Save to JSON
             config["destination_folder"] = destinationFolder
-            with open(config_file, "w") as f:
-                json.dump(config, f, indent=4)
+            config["packs"] = {}
             break
 
-print("Using destination folder:", destinationFolder)
+
 
 # -------------------------------------------------
 # ----------------- MAIN LOOP ---------------------
 # -------------------------------------------------
 
 while True:
+
+    found_packs = scan_sample_library(destinationFolder)
+    config.setdefault("packs", {})
+
+    # Merge with existing config
+    for pack_name, pack_data in found_packs.items():
+        pack_entry = config["packs"].setdefault(pack_name, {})
+        # Update pack sample count
+        pack_entry["num_samples"] = pack_data["num_samples"]
+        pack_entry["instruments"] = pack_entry.get("instruments", {})
+        
+        # Update instruments
+        for instr_name, instr_data in pack_data["instruments"].items():
+            pack_entry["instruments"][instr_name] = instr_data
+
+    # Remove packs/instruments that no longer exist
+    for pack_name in list(config["packs"].keys()):
+        if pack_name not in found_packs:
+            del config["packs"][pack_name]
+        else:
+            # Safely get existing instruments, defaulting to empty dict
+            existing_instr = set(found_packs[pack_name].get("instruments", {}).keys())
+            current_instr = set(config["packs"][pack_name].get("instruments", {}).keys())
+            for instr in current_instr - existing_instr:
+                del config["packs"][pack_name]["instruments"][instr]
+
+    # Save updated config
+    with open(config_file, "w") as f:
+        json.dump(config, f, indent=4)
+
+
     # -----------------------------
     # COLLECT SOURCE PATH
     # -----------------------------
