@@ -275,12 +275,14 @@ while True:
 
         # if instrument exists in pack, confirm and break
         if instrument in config["packs"].get(packName, {}).get("instruments", {}):
+            instrumentFolder = os.path.join(packFolder, instrument) 
             print(f"Samples for instrument '{instrument}' will be stored in existing folder.")
             break
 
         # if instrument not found, ask if user wants to create it
         create_instrument = ask_yes_no(f"There is no folder for instrument '{instrument}' in pack '{packName}'. Create it? (y/n): ")
         if create_instrument:
+            instrumentFolder = os.path.join(packFolder, instrument) 
             os.makedirs(instrumentFolder)
             print(f"Folder '{instrument}' created inside '{packFolder}'.")
             break
